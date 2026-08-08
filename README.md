@@ -10,8 +10,9 @@ An n8n-based currency conversion assistant, built from two workflows:
    rates stored by workflow 1.
 
 Exported workflow JSON lives in `workflows/`, supporting docs in `docs/`.
-Screenshots and chat recordings required by the brief are **not** stored
-in this repository — see `screenshots/` handling below.
+Screenshots and chat recordings required by the brief are tracked in
+`screenshots/` (see `.gitignore` — that directory is intentionally not
+ignored).
 
 ## Setup
 
@@ -33,6 +34,13 @@ Prerequisites, none of which are automated by this repo:
   names expected (`FREECURRENCYAPI_KEY`, `LLM_OPENAI_KEY`). Secrets are
   loaded into n8n credentials from this file; they are never written
   into exported workflow JSON or committed to git (`.env` is gitignored).
+  On **n8n Cloud** specifically, `$env` expressions are blocked at
+  runtime regardless of what the instance's environment holds — workflow
+  1's HTTP Request node instead reads the freecurrencyapi key from a
+  stored n8n credential (**Generic Credential Type → Query Auth**, param
+  name `apikey`), created manually in Credentials → Add Credential. The
+  exported workflow JSON only ever holds a credential name/id reference,
+  never the key value, on both self-hosted and Cloud.
 
 ## Documentation
 
@@ -44,7 +52,28 @@ not a functional requirement of either workflow.
 
 ## Data Table schema
 
-_(pending Workflow 1 task)_
+`currency_rates` has four columns: `base_currency`, `target_currency`, `rate`,
+`fetched_at` (full type detail in `docs/data-table-schema.md`). The logical key
+is `(base_currency, target_currency)` — freecurrencyapi's `/latest` response is
+keyed by target currency per base, so one loader run naturally produces one row
+per target currency, and re-running with a fresh pull must update those same
+rows rather than append new ones.
+
+Workflow 1 enforces this with the `Data Table` node's native `upsert` operation
+(match on `base_currency` + `target_currency`, update on match / insert
+otherwise) rather than a manual lookup-then-branch pattern — fewer nodes, same
+idempotency guarantee, and it keeps a repeated daily run from silently growing
+the table forever.
+
+**Error handling trade-off:** three distinct failure points — the HTTP call
+itself (`HTTP Request` node's error output), an empty/malformed API response
+(`IF - Response OK`), and malformed transformed rows (`IF - Rows Valid`) — all
+converge on a single `NoOp - Log Loader Error` node rather than three separate
+handlers or a persisted errors table. This keeps the failure path isolated from
+the Data Table write (no partial/invalid data ever reaches `currency_rates`)
+while staying minimal in scope; a dedicated errors table is a reasonable future
+enhancement if an audit trail of failures becomes a requirement, but isn't one
+today.
 
 ## Agent system prompt
 

@@ -1,0 +1,11 @@
+# LOG — 2026-08-08-2026-08-08-loader-fetch-upsert
+- 2026-08-08T03:09 Engineer INIT created, complexity=MEDIUM, next_actor=Planner
+- 2026-08-08T03:10 Engineer TASK.md drafted (R1-R6, A1-A7); stage remains INIT, next_actor=Planner
+- 2026-08-08T03:20 Planner PLAN.md v1 written (node sequence R1-R6); stage=PLANNED, next_actor=Executor, plan_version=1
+- 2026-08-08T03:40 Executor implemented P1-P9 live via n8n MCP + JSON export; R5/A5 screenshot not captured (no Chrome/computer-use access) - flagged as open limitation; stage=EXECUTED, next_actor=Validator, exec_version=1
+- 2026-08-08T03:50 Validator FAIL v1: A5 screenshot missing (no Chrome/computer-use access this session); open_issues=[V1-1 requirement]; stage=VALIDATED, status=FAIL, next_actor=Engineer
+- 2026-08-08T19:15 Executor v2: root-caused $env block on n8n Cloud, switched HTTP node to Query Auth credential (Engineer created it in UI), real execution 16 confirms full pipeline works against live freecurrencyapi + live currency_rates table (33 rows). A5 screenshot still open (Chrome not connected). stage=EXECUTED, next_actor=Validator, exec_version=2
+- 2026-08-08T19:20 Validator FAIL v2: A1-A4/A7 reconfirmed with real execution (33 live rates, real upsert); A5 still open (Chrome unreachable). stage=VALIDATED, status=FAIL, next_actor=Engineer, open_issues unchanged=[V1-1]
+- 2026-08-08T19:25 Engineer decision: will capture the R5/A5 screenshot themselves outside this session and drop it into screenshots/; task stays parked at VALIDATED/FAIL (open_issues=[V1-1]) until the file is added, then Validator re-checks. No STATE change.
+- 2026-08-08T19:30 Engineer amended TASK.md R5/A5 (screenshot out of scope, sent via email); Validator PASS v3, all A1-A7 satisfied; stage=DONE, status=PASS
+- 2026-08-08T16:27 Engineer CLOSED done=True; archived to tasks/DONE/2026-08

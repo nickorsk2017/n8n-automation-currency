@@ -1,0 +1,11 @@
+task_id: 2026-08-08-2026-08-08-loader-fetch-upsert
+stage: DONE
+status: PASS
+iteration: 1
+complexity: MEDIUM
+next_actor: none
+plan_version: 1
+exec_version: 2
+validation_version: 3
+open_issues: []
+last_error: null

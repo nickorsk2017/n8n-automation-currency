@@ -1,0 +1,226 @@
+{
+  "name": "1 - Daily Currency Rate Loader",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "9fb00e8c-8f9c-4c57-88f9-ee9903d5ff7f",
+      "name": "Schedule Trigger - Daily FX Pull",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 0],
+      "notes": "Fires daily. Current value: 06:00 (instance-local time, honored as UTC only if the n8n instance timezone is set to UTC - verify under Settings > Workflow > Timezone before relying on this). To change the fire time, edit triggerAtHour/triggerAtMinute directly on this node and re-export per README export discipline. If ops ever needs to change the schedule without editor access, switch this field to an expression reading FX_SCHEDULE_HOUR / FX_SCHEDULE_MINUTE from $env instead (see PLAN.md option 2) - not implemented here to avoid over-engineering a single-trigger workflow. Satisfies TASK R2/R3."
+    },
+    {
+      "id": "c377f136-b55d-4e34-86c8-939d18a6b4df",
+      "name": "Set - Loader Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [220, 0],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "1", "name": "base_currency", "value": "USD", "type": "string" }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "notes": "Defines base_currency as a single editable field so it is not hardcoded into the HTTP Request URL/query. Satisfies TASK R1."
+    },
+    {
+      "id": "e4c7b115-005f-42a6-93b7-250a1155bde2",
+      "name": "HTTP Request - Fetch Latest Rates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [440, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.freecurrencyapi.com/v1/latest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            { "name": "base_currency", "value": "={{ $json.base_currency }}" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": { "fullResponse": false, "neverError": false, "responseFormat": "json" }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": { "id": "yAID5rimNxWhXskI", "name": "freecurrencyapi" }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Calls freecurrencyapi.com /latest with base_currency from Set - Loader Config. Authenticates via the stored 'freecurrencyapi' n8n credential (Generic Credential Type / Query Auth, param name 'apikey') rather than an $env expression - this n8n Cloud instance denies $env access at runtime (confirmed: 'access to env vars denied'). No literal key value in this JSON either way; only a credential name/id reference, per root CLAUDE.md secrets rule. onError=continueErrorOutput routes transport/HTTP failures to the second output instead of aborting the workflow. Satisfies TASK R1, R4."
+    },
+    {
+      "id": "bbcf6f09-318d-4622-b072-967ab2ab8f7c",
+      "name": "IF - Response OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [660, 0],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.data ? Object.keys($json.data).length : 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        },
+        "looseTypeValidation": false,
+        "options": {}
+      },
+      "notes": "Partial-data guard: a 200 response with an empty/missing data object must not be treated as success (a transport-level success is not the same as a valid payload). False branch routes to the error log. Satisfies TASK R4."
+    },
+    {
+      "id": "1b6f273e-d0f1-45e6-adb1-0e54c7c24260",
+      "name": "Code - Rates To Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -80],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const body = $input.first().json;\nconst base = $('Set - Loader Config').first().json.base_currency;\nconst fetchedAt = new Date().toISOString();\nconst rows = Object.entries(body.data || {}).map(([target, rate]) => ({\n  base_currency: base,\n  target_currency: target,\n  rate: typeof rate === 'number' ? rate : Number(rate),\n  fetched_at: fetchedAt,\n}));\nreturn [{ json: { rows } }];"
+      },
+      "notes": "Transforms the freecurrencyapi { data: { EUR: 0.92, ... } } object into an array of { base_currency, target_currency, rate, fetched_at } rows matching docs/data-table-schema.md. Code node justified here (built-in Set/Split cannot enumerate an arbitrary object's keys into rows with a computed timestamp). Satisfies TASK R2."
+    },
+    {
+      "id": "f1db2b05-957e-4e2f-8d4c-e706d340e03a",
+      "name": "IF - Rows Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1100, -80],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ Array.isArray($json.rows) && $json.rows.length > 0 && $json.rows.every(r => r.base_currency && r.target_currency && typeof r.rate === 'number' && !Number.isNaN(r.rate) && r.fetched_at) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        },
+        "looseTypeValidation": false,
+        "options": {}
+      },
+      "notes": "Explicit partial-data guard on the transformed rows: non-empty array AND every row has all four required fields with a numeric, non-NaN rate. Failing rows never reach the Data Table write. Satisfies TASK R4."
+    },
+    {
+      "id": "f7377ced-dec8-4db0-a951-5c4fe8fcd3b4",
+      "name": "Split Out - Rows To Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1320, -80],
+      "parameters": {
+        "fieldToSplitOut": "rows",
+        "include": "noOtherFields",
+        "options": {}
+      },
+      "notes": "Turns the single-item rows array into one item per currency pair for the per-row Data Table upsert."
+    },
+    {
+      "id": "37f83348-bdc1-4661-a6c8-bd86688b3d31",
+      "name": "Data Table - Upsert Rate Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1540, -80],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "tU2fbDOMyMnanxzS", "cachedResultName": "currency_rates" },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            { "keyName": "base_currency", "condition": "eq", "keyValue": "={{ $json.base_currency }}" },
+            { "keyName": "target_currency", "condition": "eq", "keyValue": "={{ $json.target_currency }}" }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "base_currency": "={{ $json.base_currency }}",
+            "target_currency": "={{ $json.target_currency }}",
+            "rate": "={{ $json.rate }}",
+            "fetched_at": "={{ $json.fetched_at }}"
+          },
+          "matchingColumns": ["base_currency", "target_currency"]
+        },
+        "options": {}
+      },
+      "notes": "Upserts into currency_rates keyed on (base_currency, target_currency) using the node's native upsert operation, satisfying the re-runnable/idempotent convention in root CLAUDE.md. Satisfies TASK R3."
+    },
+    {
+      "id": "8bb41b09-38f3-4be1-a86f-8c400b9057d0",
+      "name": "NoOp - Log Loader Error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 160],
+      "parameters": {},
+      "notes": "Single convergence point for all loader failures (HTTP error output, invalid response payload, invalid transformed rows). Isolated from the Data Table write path so failures never corrupt currency_rates, per root CLAUDE.md \"Failure must never corrupt stored data\". Satisfies TASK R4."
+    }
+  ],
+  "connections": {
+    "Schedule Trigger - Daily FX Pull": {
+      "main": [[{ "node": "Set - Loader Config", "type": "main", "index": 0 }]]
+    },
+    "Set - Loader Config": {
+      "main": [[{ "node": "HTTP Request - Fetch Latest Rates", "type": "main", "index": 0 }]]
+    },
+    "HTTP Request - Fetch Latest Rates": {
+      "main": [
+        [{ "node": "IF - Response OK", "type": "main", "index": 0 }],
+        [{ "node": "NoOp - Log Loader Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF - Response OK": {
+      "main": [
+        [{ "node": "Code - Rates To Rows", "type": "main", "index": 0 }],
+        [{ "node": "NoOp - Log Loader Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code - Rates To Rows": {
+      "main": [[{ "node": "IF - Rows Valid", "type": "main", "index": 0 }]]
+    },
+    "IF - Rows Valid": {
+      "main": [
+        [{ "node": "Split Out - Rows To Items", "type": "main", "index": 0 }],
+        [{ "node": "NoOp - Log Loader Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Out - Rows To Items": {
+      "main": [[{ "node": "Data Table - Upsert Rate Row", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

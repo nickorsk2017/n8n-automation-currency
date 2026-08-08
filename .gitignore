@@ -30,4 +30,4 @@ __pycache__/
 # .claude/tasks/ harness artifacts — the audit trail
 
 # Custom plan 
-plan.md
+/plan.md
