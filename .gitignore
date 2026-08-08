@@ -1,0 +1,33 @@
+# --- macOS / editor junk (R1) ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Secrets (R2) ---
+# The freecurrencyapi key and the LLM provider key live in n8n credentials,
+# never in this repo. These patterns are a second line of defence.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+n8n-credentials*.json
+
+# --- Python cache from the harness scripts (R4) ---
+__pycache__/
+*.py[cod]
+
+# --- Deliverables are intentionally NOT ignored (R3) ---
+# workflows/   exported n8n workflow JSON — source of truth for review
+# docs/        schema, system prompt, tool design notes
+# screenshots/ execution + chat evidence required by the brief
+# .claude/tasks/ harness artifacts — the audit trail
+
+# Custom plan 
+plan.md
