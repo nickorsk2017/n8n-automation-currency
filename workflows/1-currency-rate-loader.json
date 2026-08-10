@@ -1,4 +1,5 @@
 {
+  "id": "iBdFv2bTfVR7chbE",
   "name": "1 - Daily Currency Rate Loader",
   "nodes": [
     {
@@ -18,7 +19,7 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [0, 0],
-      "notes": "Fires daily. Current value: 06:00 (instance-local time, honored as UTC only if the n8n instance timezone is set to UTC - verify under Settings > Workflow > Timezone before relying on this). To change the fire time, edit triggerAtHour/triggerAtMinute directly on this node and re-export per README export discipline. If ops ever needs to change the schedule without editor access, switch this field to an expression reading FX_SCHEDULE_HOUR / FX_SCHEDULE_MINUTE from $env instead (see PLAN.md option 2) - not implemented here to avoid over-engineering a single-trigger workflow. Satisfies TASK R2/R3."
+      "notes": "Fires daily at 06:00 UTC. n8n resolves this time against the instance timezone, not the node, so docker-compose.yml pins GENERIC_TIMEZONE=UTC and TZ=UTC - on any other stand (n8n Cloud included) verify Settings > Workflow > Timezone is UTC before relying on the hour. To change the fire time, edit triggerAtHour/triggerAtMinute on this node and re-export per the Export discipline in root CLAUDE.md. Satisfies TASK R2/R3."
     },
     {
       "id": "c377f136-b55d-4e34-86c8-939d18a6b4df",
@@ -175,12 +176,28 @@
     },
     {
       "id": "8bb41b09-38f3-4be1-a86f-8c400b9057d0",
-      "name": "NoOp - Log Loader Error",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
+      "name": "Code - Build Error Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [880, 160],
-      "parameters": {},
-      "notes": "Single convergence point for all loader failures (HTTP error output, invalid response payload, invalid transformed rows). Isolated from the Data Table write path so failures never corrupt currency_rates, per root CLAUDE.md \"Failure must never corrupt stored data\". Satisfies TASK R4."
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Single convergence point for all three loader failure branches. Classifies\n// which one fired and emits one structured error record.\n//\n// The classification below is total - every inbound item lands in exactly one\n// stage - because the three branches carry structurally different items:\n//   HTTP error output       -> n8n's error shape (has `error` or `message`)\n//   IF - Response OK false  -> the raw API body (no `rows` key; Code - Rates To\n//                              Rows has not run on this branch)\n//   IF - Rows Valid false   -> { rows: [...] } from Code - Rates To Rows\nconst item = $input.first().json;\n\n// Set - Loader Config always runs before every failure point, but guard anyway\n// so a classification failure can never mask the original error.\nlet base_currency = null;\ntry {\n  base_currency = $('Set - Loader Config').first().json.base_currency;\n} catch (e) {\n  base_currency = null;\n}\n\nlet failure_stage;\nlet error_message;\n\nif (item && (item.error !== undefined || item.message !== undefined)) {\n  failure_stage = 'HTTP_FETCH';\n  const raw = item.error && item.error.message ? item.error.message : item.message;\n  error_message = 'freecurrencyapi request failed: ' + (raw || 'no error message returned');\n} else if (!item || !Array.isArray(item.rows)) {\n  failure_stage = 'API_RESPONSE';\n  error_message = 'freecurrencyapi responded without usable rate data (empty or missing \"data\" object)';\n} else {\n  failure_stage = 'ROW_VALIDATION';\n  error_message = 'Transformed rows failed validation: expected a non-empty array where every row has base_currency, target_currency, a numeric rate and fetched_at (got ' + item.rows.length + ' row(s))';\n}\n\nreturn [{\n  json: {\n    workflow: 'Daily Currency Rate Loader',\n    failure_stage,\n    error_message,\n    base_currency,\n    failed_at: new Date().toISOString(),\n  },\n}];"
+      },
+      "notes": "Single convergence point for all loader failures (HTTP error output, invalid response payload, invalid transformed rows). Emits a structured record - failure_stage, error_message, base_currency, failed_at - so a failed daily run is diagnosable from the execution log without re-running it. Code node justified here because the three inbound branches carry structurally different items, and choosing between them requires conditional inspection that a Set node cannot express (the validation-rules exemption in root CLAUDE.md). Isolated from the Data Table write path so failures never corrupt currency_rates. Satisfies TASK R4."
+    },
+    {
+      "id": "3f2c9d41-6a77-4d3e-9c58-0b1e7a4f28d6",
+      "name": "Stop and Error - Fail Loader Run",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1100, 160],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=Currency rate loader failed [{{ $json.failure_stage }}]: {{ $json.error_message }}"
+      },
+      "notes": "Terminates the error branch by throwing, so the run is marked failed in n8n's executions list. Without this the workflow would report success on a day when no rates were loaded, which is the failure mode this task exists to remove. Has no outgoing connection and never reaches Data Table - Upsert Rate Row, so the isolation guarantee is unchanged. Satisfies TASK R4."
     }
   ],
   "connections": {
@@ -193,13 +210,13 @@
     "HTTP Request - Fetch Latest Rates": {
       "main": [
         [{ "node": "IF - Response OK", "type": "main", "index": 0 }],
-        [{ "node": "NoOp - Log Loader Error", "type": "main", "index": 0 }]
+        [{ "node": "Code - Build Error Record", "type": "main", "index": 0 }]
       ]
     },
     "IF - Response OK": {
       "main": [
         [{ "node": "Code - Rates To Rows", "type": "main", "index": 0 }],
-        [{ "node": "NoOp - Log Loader Error", "type": "main", "index": 0 }]
+        [{ "node": "Code - Build Error Record", "type": "main", "index": 0 }]
       ]
     },
     "Code - Rates To Rows": {
@@ -208,16 +225,20 @@
     "IF - Rows Valid": {
       "main": [
         [{ "node": "Split Out - Rows To Items", "type": "main", "index": 0 }],
-        [{ "node": "NoOp - Log Loader Error", "type": "main", "index": 0 }]
+        [{ "node": "Code - Build Error Record", "type": "main", "index": 0 }]
       ]
     },
     "Split Out - Rows To Items": {
       "main": [[{ "node": "Data Table - Upsert Rate Row", "type": "main", "index": 0 }]]
+    },
+    "Code - Build Error Record": {
+      "main": [[{ "node": "Stop and Error - Fail Loader Run", "type": "main", "index": 0 }]]
     }
   },
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "timezone": "UTC"
   },
   "staticData": null,
   "meta": {

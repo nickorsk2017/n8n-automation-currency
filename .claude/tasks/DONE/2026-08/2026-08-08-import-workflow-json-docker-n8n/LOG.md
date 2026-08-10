@@ -1,0 +1,11 @@
+# LOG — 2026-08-08-import-workflow-json-docker-n8n
+- 2026-08-08T19:30 Engineer INIT created, complexity=MEDIUM, next_actor=Planner
+- 2026-08-08T19:35 Engineer wrote TASK.md (R1-R3 defined: import command for Docker n8n via CLI, docs, no secrets); stage remains INIT, next_actor=Planner
+- 2026-08-08T19:45 Planner wrote PLAN.md v1 (script .claude/scripts/import_workflow.sh + Makefile 'import' target + README Setup subsection, using existing workflows/ bind mount, no docker cp, no secrets); stage=PLANNED, next_actor=Executor
+- 2026-08-08T19:55 Executor wrote EXEC.md v1 (added import_workflow.sh, Makefile import target, README section; verified script behavior locally, Docker itself unavailable in sandbox — A1 flagged for local verification); stage=EXECUTED, next_actor=Validator
+- 2026-08-08T20:05 Validator wrote VALIDATION.md v1: FAIL, architecture issue ISSUE-1 (script should live under top-level scripts/, not .claude/scripts/, per root CLAUDE.md Repository layout); iteration=1, stage=VALIDATED, next_actor=Planner
+- 2026-08-08T20:15 Planner wrote PLAN.md v2 addressing ISSUE-1: move script to top-level scripts/import_workflow.sh (out of .claude/scripts/, which stays harness-only); cleared open_issues; stage=PLANNED, next_actor=Executor
+- 2026-08-08T20:25 Executor wrote EXEC.md v2 addressing ISSUE-1: moved script .claude/scripts/ -> scripts/, updated Makefile+README paths, deleted old file (Cowork delete permission granted); verified no stale path references; stage=EXECUTED, next_actor=Validator
+- 2026-08-08T20:35 Validator wrote VALIDATION.md v2: PASS. ISSUE-1 resolved (script placement); R1-R3/A1-A3 checked via static review; A1 live-Docker run flagged as non-blocking manual follow-up for Engineer (no Docker daemon in sandbox); stage=VALIDATED, status=PASS
+- 2026-08-08T20:40 Engineer set stage=DONE (status=PASS, open_issues=[]) per routing; ready for runner.py done
+- 2026-08-08T19:42 Engineer CLOSED done=True; archived to tasks/DONE/2026-08

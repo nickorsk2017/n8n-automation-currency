@@ -76,11 +76,59 @@ issue instead of advancing.
 ## Repository layout
 - `workflows/` — exported n8n workflow JSON, one file per workflow, numbered
   (`1-currency-rate-loader.json`, `2-ai-chat-currency-agent.json`).
-- `docs/` — data table schema, agent system prompt, tool design notes.
+- `docs/` — human documentation of how the system works now (see `docs/` rules below).
 - `screenshots/` — execution screenshots and chat recordings required by the brief.
 - `README.md` — submission entry point: setup, schema rationale, system prompt,
   trade-offs.
 - `.claude/` — the harness (runner, role skills, hooks, task artifacts).
+
+## `docs/` rules
+`docs/` answers **what exists and how it behaves**. The harness (`.claude/tasks/`)
+answers **how it came to be** — decisions, alternatives, stage history, task ids.
+The same change usually produces a sentence for each; they are not duplicates, and
+a `docs/` page that restates task history is a defect.
+
+- **Never in `docs/`**: task ids, requirement or acceptance ids (`R1`, `A1`),
+  stage names, references to harness artifacts, or a record of what was tried and
+  rejected. Documentation is rewritten in place, not versioned in prose.
+- **One directory per workflow** under `docs/workflows/<name>/`, with `README.md`
+  as its main page. Names are descriptive and carry no numeric prefix
+  (`docs/workflows/rate-loader/`, not `workflow-1-rate-loader.md`). The exported
+  JSON in `workflows/` keeps its numbering; the docs do not.
+- **Workflow-specific material lives inside that workflow's directory** — the data
+  table a workflow owns, its tool contracts, its prompts. The top level of `docs/`
+  is reserved for genuinely cross-cutting material such as `architecture.md`.
+- **Operational instructions belong in the `Makefile`**, next to the commands they
+  describe: prerequisites, first-run setup, credentials, how to read a failed run.
+  A separate operations page is the copy that goes stale, because whoever changes
+  a target is looking at the Makefile.
+- **`docs/README.md` stays short** — what the section is for and how it syncs. It
+  does not summarise the pages beneath it; the directory listing already does.
+- **`README.md` carries nothing workflow-specific.** The root README states what
+  the system is, how to set it up, and its trade-offs — material about the system
+  as a whole or about the submission itself. A schema, a system prompt, a tool
+  contract or a node's behaviour belongs under `docs/workflows/<name>/`, and the
+  README links to it by name so a reader still finds it. Restating it in both
+  places creates two copies, one of which will silently go stale.
+- **Link the workflow's directory, not a file inside it.** Anything outside
+  `docs/workflows/<name>/` links to `docs/workflows/<name>/` and says what is to
+  be found there. Linking a page inside binds the linking file to that
+  directory's contents, so adding, renaming or splitting a page then breaks
+  links elsewhere; linking the directory binds only to the workflow's existence.
+- **Every link must resolve.** Check mechanically after moving or deleting a page.
+
+## Documentation sync to Notion
+`docs/` is mirrored to Notion under **N8N Workflows**. The repository is the
+source; Notion is the copy, and it is never edited by hand to say something the
+repository does not.
+
+- The mirror is refreshed **on request**, not automatically, and only from `docs/`.
+- **Only pages under `N8N Workflows` may be created or modified.** Anything else in
+  the workspace — drafts, marketing, unrelated sections — is out of bounds.
+- A Notion page describing something that is not implemented must say so in its
+  first line; otherwise present-tense documentation reads as a working system.
+- Restructuring `docs/` leaves the mirror stale until a sync is requested. Say so
+  rather than assuming the two agree.
 
 ## n8n conventions
 - **Secrets never live in workflow JSON.** The freecurrencyapi key and the LLM key are
