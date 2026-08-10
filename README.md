@@ -139,7 +139,7 @@ make export ID=<WORKFLOW_ID> FILE=currency-rate-loader.json
 make drift  ID=<WORKFLOW_ID> FILE=currency-rate-loader.json
 ```
 
-## Trade-offs and ToDo
+## Trade-offs and Things I'd Improve With More Time
 
 What I'd improve with more time:
 
@@ -148,10 +148,13 @@ What I'd improve with more time:
 - **Tests** for the cross-rate arithmetic and the validation rules, currently
   verified by running them rather than by a suite.
 - **Rate limiting and DDoS protection for the chat agent and any other
-  publicly exposed workflow.** Belongs at the infrastructure level (a
-  reverse proxy/CDN like Cloudflare in front of n8n), not inside the
-  workflow. Not provisioned in this repo today; `docker-compose.yml` runs
-  n8n only.
+  publicly exposed workflow.** Checked whether this could be done inside the
+  workflow — self-hosted n8n Community edition has no built-in node or
+  trigger that keys a rate limit off the caller's IP/address, so it is not a
+  workflow-level capability on this stand, not just something left undone.
+  Belongs at the infrastructure level instead (a reverse proxy/CDN like
+  Cloudflare in front of n8n). Not provisioned in this repo today;
+  `docker-compose.yml` runs n8n only.
 - **Automated evaluation of the chat agent's answer quality**, via n8n's
   built-in Evaluations (Evaluation Trigger/node scoring against a Data
   Table of expected Q&A) instead of manual conversation checks. Left as
