@@ -6,7 +6,7 @@ services:
       - .env
     environment:
       # Non-secret operational config, deliberately here and not in the gitignored
-      # .env: the Schedule Trigger in workflows/1-currency-rate-loader.json fires at
+      # .env: the Schedule Trigger in workflows/currency-rate-loader.json fires at
       # 06:00 resolved against the *instance* timezone, so "06:00 UTC" is only true
       # if every stand pins it identically. GENERIC_TIMEZONE drives n8n scheduling;
       # TZ aligns the container clock so logs and Code-node timestamps agree.

@@ -9,7 +9,7 @@
 # Usage:
 #   scripts/export_workflow.sh <workflow-id> <file-in-workflows-dir>
 # Example:
-#   scripts/export_workflow.sh iBdFv2bTfVR7chbE 1-currency-rate-loader.json
+#   scripts/export_workflow.sh <WORKFLOW_ID> currency-rate-loader.json
 #
 # The workflow id is required rather than inferred: export is addressed by id,
 # the repo names files by number and slug, and guessing the mapping between them
@@ -28,7 +28,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 <workflow-id> <file-in-workflows-dir>" >&2
-  echo "Example: $0 iBdFv2bTfVR7chbE 1-currency-rate-loader.json" >&2
+  echo "Example: $0 <WORKFLOW_ID> currency-rate-loader.json" >&2
   exit 1
 fi
 

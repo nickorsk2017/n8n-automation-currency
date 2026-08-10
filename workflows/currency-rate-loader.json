@@ -1,6 +1,7 @@
 {
   "id": "iBdFv2bTfVR7chbE",
-  "name": "1 - Daily Currency Rate Loader",
+  "name": "Daily Currency Rate Loader",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -18,7 +19,10 @@
       "name": "Schedule Trigger - Daily FX Pull",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "notes": "Fires daily at 06:00 UTC. n8n resolves this time against the instance timezone, not the node, so docker-compose.yml pins GENERIC_TIMEZONE=UTC and TZ=UTC - on any other stand (n8n Cloud included) verify Settings > Workflow > Timezone is UTC before relying on the hour. To change the fire time, edit triggerAtHour/triggerAtMinute on this node and re-export per the Export discipline in root CLAUDE.md. Satisfies TASK R2/R3."
     },
     {
@@ -26,12 +30,20 @@
       "name": "Set - Loader Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "parameters": {
         "mode": "manual",
         "assignments": {
           "assignments": [
-            { "id": "1", "name": "base_currency", "value": "USD", "type": "string" }
+            {
+              "id": "1",
+              "name": "base_currency",
+              "value": "USD",
+              "type": "string"
+            }
           ]
         },
         "includeOtherFields": false,
@@ -44,7 +56,10 @@
       "name": "HTTP Request - Fetch Latest Rates",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
-      "position": [440, 0],
+      "position": [
+        440,
+        0
+      ],
       "parameters": {
         "method": "GET",
         "url": "https://api.freecurrencyapi.com/v1/latest",
@@ -54,37 +69,61 @@
         "specifyQuery": "keypair",
         "queryParameters": {
           "parameters": [
-            { "name": "base_currency", "value": "={{ $json.base_currency }}" }
+            {
+              "name": "base_currency",
+              "value": "={{ $json.base_currency }}"
+            }
           ]
         },
         "options": {
           "response": {
-            "response": { "fullResponse": false, "neverError": false, "responseFormat": "json" }
+            "response": {
+              "fullResponse": false,
+              "neverError": false,
+              "responseFormat": "json"
+            }
           }
         }
       },
       "credentials": {
-        "httpQueryAuth": { "id": "yAID5rimNxWhXskI", "name": "freecurrencyapi" }
+        "httpQueryAuth": {
+          "id": "fcaHttpQueryAuth",
+          "name": "freecurrencyapi"
+        }
       },
       "onError": "continueErrorOutput",
-      "notes": "Calls freecurrencyapi.com /latest with base_currency from Set - Loader Config. Authenticates via the stored 'freecurrencyapi' n8n credential (Generic Credential Type / Query Auth, param name 'apikey') rather than an $env expression - this n8n Cloud instance denies $env access at runtime (confirmed: 'access to env vars denied'). No literal key value in this JSON either way; only a credential name/id reference, per root CLAUDE.md secrets rule. onError=continueErrorOutput routes transport/HTTP failures to the second output instead of aborting the workflow. Satisfies TASK R1, R4."
+      "notes": "Calls freecurrencyapi.com /latest with base_currency from Set - Loader Config. Uses the freecurrencyapi credential (httpQueryAuth), imported via scripts/import_credentials.sh under a fixed id (fcaHttpQueryAuth) so this file resolves the same credential on any Docker stand without manual reselection in the n8n UI — see that script for the id's single source of truth. onError=continueErrorOutput routes transport/HTTP failures to the second output instead of aborting the workflow. Satisfies TASK R1, R4. Retries transiently-failed requests (timeout, 5xx, rate limit) up to 3 times with a 2s wait before onError routes to the error branch — satisfies TASK R1/R2 of loader-http-retry.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "id": "bbcf6f09-318d-4622-b072-967ab2ab8f7c",
       "name": "IF - Response OK",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [660, 0],
+      "position": [
+        660,
+        0
+      ],
       "parameters": {
         "conditions": {
           "combinator": "and",
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "c1",
               "leftValue": "={{ $json.data ? Object.keys($json.data).length : 0 }}",
               "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
             }
           ]
         },
@@ -98,7 +137,10 @@
       "name": "Code - Rates To Rows",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -80],
+      "position": [
+        880,
+        -80
+      ],
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
@@ -111,53 +153,133 @@
       "name": "IF - Rows Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [1100, -80],
+      "position": [
+        1100,
+        -80
+      ],
       "parameters": {
         "conditions": {
           "combinator": "and",
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ Array.isArray($json.rows) && $json.rows.length > 0 && $json.rows.every(r => r.base_currency && r.target_currency && typeof r.rate === 'number' && !Number.isNaN(r.rate) && r.fetched_at) }}",
+              "leftValue": "={{ Array.isArray($json.rows) && $json.rows.length > 0 }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ]
         },
         "looseTypeValidation": false,
         "options": {}
       },
-      "notes": "Explicit partial-data guard on the transformed rows: non-empty array AND every row has all four required fields with a numeric, non-NaN rate. Failing rows never reach the Data Table write. Satisfies TASK R4."
+      "notes": "Structural partial-data guard on the transformed rows: the API response must have yielded at least one row at all. A totally empty/unusable payload never reaches the Data Table write and instead routes to Code - Build Error Record -> Stop and Error, failing the run. Per-field validation of each individual row (correct types, non-NaN rate) happens later, per row, at IF - Row Fields Valid, so one malformed currency no longer blocks the others. Satisfies TASK R4."
     },
     {
       "id": "f7377ced-dec8-4db0-a951-5c4fe8fcd3b4",
       "name": "Split Out - Rows To Items",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [1320, -80],
+      "position": [
+        1320,
+        -80
+      ],
       "parameters": {
         "fieldToSplitOut": "rows",
         "include": "noOtherFields",
         "options": {}
       },
-      "notes": "Turns the single-item rows array into one item per currency pair for the per-row Data Table upsert."
+      "notes": "Turns the single-item rows array into one item per currency pair, so IF - Row Fields Valid and the Data Table upsert operate on one currency at a time instead of the whole batch."
+    },
+    {
+      "id": "a2e819f4-6d3b-4c1a-8f0e-2b7c5d941e6a",
+      "name": "IF - Row Fields Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1540,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$json.base_currency && !!$json.target_currency && typeof $json.rate === 'number' && !Number.isNaN($json.rate) && !!$json.fetched_at }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": false,
+        "options": {}
+      },
+      "notes": "Per-row validation, evaluated once per currency after Split Out - Rows To Items: base_currency, target_currency, a numeric non-NaN rate and fetched_at must all be present. A malformed row (e.g. one bad currency code in an otherwise good response) never reaches Data Table - Upsert Rate Row -- it is routed to Code - Log Skipped Row instead, which logs it without throwing, so every other valid currency in the same run still upserts. Replaces the previous all-or-nothing .every() check that used to fail the whole run over a single bad row. Satisfies TASK R1/R2 of loader-row-level-validation."
+    },
+    {
+      "id": "b3f92a05-7e4c-4d2b-9a1f-3c8d6e052f7b",
+      "name": "Code - Log Skipped Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -40
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const row = $input.item.json;\nreturn {\n  json: {\n    workflow: 'Daily Currency Rate Loader',\n    warning: 'ROW_SKIPPED_INVALID',\n    reason: 'Row failed per-field validation (missing currency code, non-numeric/NaN rate, or missing fetched_at) and was skipped without upserting.',\n    base_currency: row.base_currency ?? null,\n    target_currency: row.target_currency ?? null,\n    rate: row.rate ?? null,\n    fetched_at: row.fetched_at ?? null,\n    skipped_at: new Date().toISOString(),\n  },\n};"
+      },
+      "notes": "Terminal node for a single invalid row (no outgoing connection): records which currency pair was skipped and why, visible in the execution log, without throwing -- unlike Code - Build Error Record -> Stop and Error, this must NOT fail the run, because other valid rows in the same execution still need to reach Data Table - Upsert Rate Row. Code node justified: per-item field inspection with fallbacks is beyond what a Set node expresses cleanly. Satisfies TASK R2/R3 of loader-row-level-validation."
     },
     {
       "id": "37f83348-bdc1-4661-a6c8-bd86688b3d31",
       "name": "Data Table - Upsert Rate Row",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [1540, -80],
+      "position": [
+        1540,
+        -80
+      ],
       "parameters": {
         "resource": "row",
         "operation": "upsert",
-        "dataTableId": { "__rl": true, "mode": "id", "value": "tU2fbDOMyMnanxzS", "cachedResultName": "currency_rates" },
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "currency_rates"
+        },
         "matchType": "allConditions",
         "filters": {
           "conditions": [
-            { "keyName": "base_currency", "condition": "eq", "keyValue": "={{ $json.base_currency }}" },
-            { "keyName": "target_currency", "condition": "eq", "keyValue": "={{ $json.target_currency }}" }
+            {
+              "keyName": "base_currency",
+              "condition": "eq",
+              "keyValue": "={{ $json.base_currency }}"
+            },
+            {
+              "keyName": "target_currency",
+              "condition": "eq",
+              "keyValue": "={{ $json.target_currency }}"
+            }
           ]
         },
         "columns": {
@@ -168,18 +290,24 @@
             "rate": "={{ $json.rate }}",
             "fetched_at": "={{ $json.fetched_at }}"
           },
-          "matchingColumns": ["base_currency", "target_currency"]
+          "matchingColumns": [
+            "base_currency",
+            "target_currency"
+          ]
         },
         "options": {}
       },
-      "notes": "Upserts into currency_rates keyed on (base_currency, target_currency) using the node's native upsert operation, satisfying the re-runnable/idempotent convention in root CLAUDE.md. Satisfies TASK R3."
+      "notes": "Upserts into currency_rates keyed on (base_currency, target_currency) using the node's native upsert operation, satisfying the re-runnable/idempotent convention in root CLAUDE.md. dataTableId uses mode=\"name\" rather than a specific instance's id so this file imports cleanly on any Docker stand where make setup-data-table has created the table, without per-instance patching. Satisfies TASK R3."
     },
     {
       "id": "8bb41b09-38f3-4be1-a86f-8c400b9057d0",
       "name": "Code - Build Error Record",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 160],
+      "position": [
+        880,
+        160
+      ],
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
@@ -192,7 +320,10 @@
       "name": "Stop and Error - Fail Loader Run",
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
-      "position": [1100, 160],
+      "position": [
+        1100,
+        160
+      ],
       "parameters": {
         "errorType": "errorMessage",
         "errorMessage": "=Currency rate loader failed [{{ $json.failure_stage }}]: {{ $json.error_message }}"
@@ -202,37 +333,131 @@
   ],
   "connections": {
     "Schedule Trigger - Daily FX Pull": {
-      "main": [[{ "node": "Set - Loader Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Set - Loader Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Set - Loader Config": {
-      "main": [[{ "node": "HTTP Request - Fetch Latest Rates", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Fetch Latest Rates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HTTP Request - Fetch Latest Rates": {
       "main": [
-        [{ "node": "IF - Response OK", "type": "main", "index": 0 }],
-        [{ "node": "Code - Build Error Record", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "IF - Response OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Build Error Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "IF - Response OK": {
       "main": [
-        [{ "node": "Code - Rates To Rows", "type": "main", "index": 0 }],
-        [{ "node": "Code - Build Error Record", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Code - Rates To Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Build Error Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Code - Rates To Rows": {
-      "main": [[{ "node": "IF - Rows Valid", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "IF - Rows Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF - Rows Valid": {
       "main": [
-        [{ "node": "Split Out - Rows To Items", "type": "main", "index": 0 }],
-        [{ "node": "Code - Build Error Record", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Split Out - Rows To Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Build Error Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Split Out - Rows To Items": {
-      "main": [[{ "node": "Data Table - Upsert Rate Row", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "IF - Row Fields Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Row Fields Valid": {
+      "main": [
+        [
+          {
+            "node": "Data Table - Upsert Rate Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Log Skipped Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Code - Build Error Record": {
-      "main": [[{ "node": "Stop and Error - Fail Loader Run", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Stop and Error - Fail Loader Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},

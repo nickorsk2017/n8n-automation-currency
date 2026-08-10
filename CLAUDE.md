@@ -75,9 +75,8 @@ issue instead of advancing.
 
 ## Repository layout
 - `workflows/` — exported n8n workflow JSON, one file per workflow, numbered
-  (`1-currency-rate-loader.json`, `2-ai-chat-currency-agent.json`).
+  (`currency-rate-loader.json`, `ai-chat-currency-agent.json`).
 - `docs/` — human documentation of how the system works now (see `docs/` rules below).
-- `screenshots/` — execution screenshots and chat recordings required by the brief.
 - `README.md` — submission entry point: setup, schema rationale, system prompt,
   trade-offs.
 - `.claude/` — the harness (runner, role skills, hooks, task artifacts).
@@ -117,19 +116,6 @@ a `docs/` page that restates task history is a defect.
   links elsewhere; linking the directory binds only to the workflow's existence.
 - **Every link must resolve.** Check mechanically after moving or deleting a page.
 
-## Documentation sync to Notion
-`docs/` is mirrored to Notion under **N8N Workflows**. The repository is the
-source; Notion is the copy, and it is never edited by hand to say something the
-repository does not.
-
-- The mirror is refreshed **on request**, not automatically, and only from `docs/`.
-- **Only pages under `N8N Workflows` may be created or modified.** Anything else in
-  the workspace — drafts, marketing, unrelated sections — is out of bounds.
-- A Notion page describing something that is not implemented must say so in its
-  first line; otherwise present-tense documentation reads as a working system.
-- Restructuring `docs/` leaves the mirror stale until a sync is requested. Say so
-  rather than assuming the two agree.
-
 ## n8n conventions
 - **Secrets never live in workflow JSON.** The freecurrencyapi key and the LLM key are
   supplied via a local `.env` file (see `.env.example` for the required variable
@@ -147,6 +133,26 @@ repository does not.
   failures routed to an isolated error branch.
 - **Workflows are re-runnable.** Loaders upsert on a stable key rather than appending,
   so a repeated run is idempotent.
+- **Workflows meant to run unattended are imported active, not left for a manual
+  toggle.** `n8n import:workflow` does not honor an `active` field in the JSON — a
+  freshly imported workflow always lands inactive regardless of the file's content.
+  Any workflow with a trigger that must fire on its own (a Schedule Trigger) or that
+  is called as a self-referencing tool sub-workflow needs `"active": true` at the
+  file's top level, and the import tooling is responsible for activating it
+  afterward — not a step a person repeats by hand in the editor after every
+  import. Activate via the Public API (`POST /workflows/:id/activate`,
+  a dedicated action endpoint — not a PATCH toggling an `active` field, which
+  returns 405 on this API version), not the `n8n update:workflow` CLI
+  command — that command is deprecated and prints a warning; the API is
+  n8n's current, supported mechanism for the same operation.
+- **Resource-locator fields reference by the most portable mode the node actually
+  supports**, not a blanket rule. Some nodes resolve by name at runtime (e.g. the
+  Data Table node's `mode: "name"`), which survives moving to a fresh instance
+  without any id to reconcile. Nodes that only support `list`/`id` modes (e.g.
+  `@n8n/n8n-nodes-langchain.toolWorkflow`'s `workflowId`) have no by-name option —
+  for those, a fixed id chosen once and checked into both the workflow JSON and
+  whatever provisions the referenced resource is the portable equivalent. Check the
+  node's actual type definition before assuming a mode exists.
 
 ## Export discipline
 Workflow JSON in `workflows/` is the source of truth for review, not the live n8n

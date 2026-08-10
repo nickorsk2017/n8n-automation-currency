@@ -26,8 +26,4 @@ __pycache__/
 # --- Deliverables are intentionally NOT ignored (R3) ---
 # workflows/   exported n8n workflow JSON — source of truth for review
 # docs/        schema, system prompt, tool design notes
-# screenshots/ execution + chat evidence required by the brief
 # .claude/tasks/ harness artifacts — the audit trail
-
-# Custom plan 
-/plan.md

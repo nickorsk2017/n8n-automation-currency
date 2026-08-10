@@ -6,13 +6,12 @@
 |---|---|---|
 | `.claude/tasks/` | Stages, task ids, plans, execution and validation records, decision history | Machine / audit |
 | `docs/` | How the system works right now, no history | People |
-| Notion → `N8N Workflows` | Mirror of `docs/` | Business readers, reviewers |
 | `workflows/*.json` | The implementation, and the artifact under review | n8n |
 | Claude + MCP | Sync, audit, documentation — on request | The engineer operating the system |
 
 The last row is the one that surprises people, so it is worth stating plainly:
 **the automation around these workflows is not another n8n workflow.** It is
-Claude with access to the n8n MCP connector, the Notion MCP connector and this
+Claude with access to the n8n MCP connector and this
 git repository. That is why the audit, the documentation refresh and the
 stand-to-stand sync are things an engineer asks for rather than jobs on a
 schedule. Making them scheduled is future work, not a redesign — the operations
