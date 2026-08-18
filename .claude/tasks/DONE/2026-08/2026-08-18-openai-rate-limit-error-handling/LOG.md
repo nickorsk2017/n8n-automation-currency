@@ -1,0 +1,8 @@
+# LOG — 2026-08-18-openai-rate-limit-error-handling
+- 2026-08-18T01:05 Engineer INIT created, complexity=MEDIUM, next_actor=Planner
+- 2026-08-18T04:07 Engineer wrote TASK.md (R1-R5, A1-A5); stage=INIT, next_actor=Planner unchanged
+- 2026-08-18T04:28 Planner wrote PLAN.md v1 (AI Agent onError=continueErrorOutput + NoOp log + Set format branch; Cloud-first rollout, sync to Docker + repo JSON + docs); stage=PLANNED, next_actor=Executor
+- 2026-08-18T04:40 Executor wrote EXEC.md v1: Cloud R1/R2 done+verified live (real OpenAI 'Bad request' failure caught, logged, and surfaced as friendly chat message); repo JSON synced (R3 part 1); docs updated (A5); Docker sync (R3 part 2/A2) BLOCKED -- no Docker/API access in session shell, flagged for Validator/Engineer. stage=EXECUTED, next_actor=Validator
+- 2026-08-18T06:48 Validator wrote VALIDATION.md v1: FAIL. R1/R2/R4/R5 and A1/A3/A4 met (Cloud error branch verified on real failures, no secrets in export); two blocking issues - V-1 (requirement) Docker sync/verify A2 needs the Engineer, reclassified from the Executor architecture label; V-2 (logic) docs claim no technical detail while the node interpolates $json.error.message; stage VALIDATED, status FAIL, iteration 1, next_actor=Engineer
+- 2026-08-18T08:45 Engineer amended TASK.md: Docker sync (R3 part 2 / A2) descoped to successor task 2026-08-18-sync-chat-agent-to-docker, since no actor here can reach the Docker daemon or the local n8n API and the chat-agent graph has since changed. Validator wrote VALIDATION.md v2: PASS on the amended scope; V-1 descoped (not verified, explicitly), V-2 confirmed resolved by the guardrail task; stage DONE, status PASS
+- 2026-08-18T04:13 Engineer CLOSED done=True; archived to tasks/DONE/2026-08

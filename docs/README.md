@@ -10,3 +10,4 @@ next to the commands they describe.
 - [architecture.md](architecture.md) — layers, the two n8n stands, data flow
 - [workflows/rate-loader/](workflows/rate-loader/) — the daily rate loader and the data table it writes
 - [workflows/chat-agent/](workflows/chat-agent/) — the chat agent and its conversion tool
+- [workflows/error-logger/](workflows/error-logger/) — the shared error-logging sub-workflow

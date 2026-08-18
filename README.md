@@ -160,7 +160,9 @@ What I'd improve with more time:
   Table of expected Q&A) instead of manual conversation checks. Left as
   future work because Community edition gates it behind a free,
   per-instance registration step every engineer running `make up` would
-  have to repeat themselves.
+  have to repeat themselves, and today the judge/scoring model that
+  feature supports is Claude only — see
+  [Chat agent](docs/workflows/chat-agent/) for the current state.
 
 ## Documentation
 

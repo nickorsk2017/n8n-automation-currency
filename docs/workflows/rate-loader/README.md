@@ -114,6 +114,17 @@ same execution still reaches `Data Table - Upsert Rate Row`. A single bad
 currency in the API response can no longer block that day's update for every
 other currency.
 
+## Evaluations are not wired here
+
+Unlike the chat agent (see [Chat agent](../chat-agent/)), this workflow does
+not use n8n's built-in Evaluations. That feature judges a workflow's output
+for quality against an expected answer — a good fit for an LLM's
+free-text response, a poor one here: given a fixed sample API response, this
+loader's transform, validation, and upsert are pure functions of their
+input, so the correct output is a single exact value, not something worth
+judging for similarity. That is what a unit/integration test checks (see
+the root README's trade-offs), not an Evaluation-node comparison.
+
 ## Re-running is safe
 
 The write is an upsert matched on `(base_currency, target_currency)`, so running

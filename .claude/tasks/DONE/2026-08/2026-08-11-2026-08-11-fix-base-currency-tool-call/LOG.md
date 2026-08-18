@@ -1,0 +1,8 @@
+# LOG — 2026-08-11-2026-08-11-fix-base-currency-tool-call
+- 2026-08-11T07:14 Engineer INIT created, complexity=MEDIUM, next_actor=Planner
+- 2026-08-11T07:20 Engineer wrote TASK.md (R1: NO_RATE_DATA guard skipped when either leg is base currency USD, misreports UNKNOWN_CURRENCY on empty table; R2: strengthen system prompt so Rule 1 covers base-currency legs, node has no tool_choice param per get_node_types; R3: docs update; R4: test evidence); stage remains INIT, next_actor=Planner
+- 2026-08-11T07:25 Planner wrote PLAN.md v1 (reframe NO_RATE_DATA guard around non-base leg(s) rather than requiring both legs non-base; additive Rule 1 clause covering base-currency legs explicitly; docs sync; 3-case test plan); stage=PLANNED, next_actor=Executor
+- 2026-08-11T07:45 Executor wrote EXEC.md v1 (fixed NO_RATE_DATA guard in Code - Compute Conversion to fire on any zero-row result touching a non-base currency, not only when both legs are non-base; hardened AI Agent systemMessage Rule 1 to explicitly cover USD legs; applied live via update_workflow to bLflLYfGzORWkjJV, re-exported to workflows/ai-chat-currency-agent.json; updated docs/workflows/chat-agent/README.md; ran 3 live/pinned test executions (95, 91, 93) confirming EUR->USD on empty table now returns NO_RATE_DATA, EUR->USD on populated table still calls tool and succeeds, EUR->JPY unaffected); stage=EXECUTED, next_actor=Validator
+- 2026-08-11T07:55 Validator wrote VALIDATION.md v1: PASS. A1-A6 all verified live (executions 95, 91, 93, 96). No blocking issues; stage=VALIDATED, status=PASS, next_actor=Engineer
+- 2026-08-11T07:56 Engineer closed: stage VALIDATED(PASS) -> DONE
+- 2026-08-11T07:21 Engineer CLOSED done=True; archived to tasks/DONE/2026-08

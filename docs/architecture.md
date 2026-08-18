@@ -76,3 +76,7 @@ same daily schedule rather than restoring the original.
 Anything that fails between steps 2 and 3 stops before the table is written.
 That guarantee is described in
 [workflows/rate-loader/](workflows/rate-loader/).
+
+Errors raised inside the chat agent (steps 4-7) are centrally logged through a
+shared sub-workflow rather than each failure branch inventing its own record.
+See [workflows/error-logger/](workflows/error-logger/).

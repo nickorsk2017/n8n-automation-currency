@@ -1,0 +1,15 @@
+task_id: 2026-08-18-2026-08-18-sync-chat-agent-to-docker
+stage: ESCALATED
+status: PENDING
+iteration: 0
+complexity: LOW
+next_actor: Engineer
+plan_version: 0
+exec_version: 1
+validation_version: 0
+open_issues:
+  - id: EXEC-1
+    type: requirement
+    severity: blocking
+    ref: "No Docker daemon and no routable local n8n in any actor's environment; only the Engineer can run make up / make setup / make import-all / make drift. Access blocker, not an implementation gap."
+last_error: "Docker unreachable from the execution environment: 'docker' not installed, localhost:5678 returns HTTP 000. No instance was touched."

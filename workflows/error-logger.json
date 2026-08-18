@@ -1,0 +1,115 @@
+{
+  "id": "w5dvcvpZ5b9AVTLC",
+  "name": "Error Logger",
+  "active": true,
+  "nodes": [
+    {
+      "id": "6deb1164-19af-4f83-9cc3-4ac5de3288c0",
+      "name": "Execute Workflow Trigger - Log Error Entry",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "source_workflow",
+              "type": "string"
+            },
+            {
+              "name": "context",
+              "type": "string"
+            },
+            {
+              "name": "message",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "notes": "Universal error-logging entry point: any workflow in this repository calls this sub-workflow to record a failure. Declares the three fields every caller supplies; no other inputSource is used so the contract stays explicit."
+    },
+    {
+      "id": "4a0216cd-bd9f-4fc3-9e98-8dae828f510b",
+      "name": "Data Table - Insert Error Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "error_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source_workflow": "={{ $json.source_workflow }}",
+            "context": "={{ $json.context }}",
+            "message": "={{ $json.message }}"
+          },
+          "schema": [
+            {
+              "id": "source_workflow",
+              "displayName": "source_workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "context",
+              "displayName": "context",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      },
+      "notes": "Writes one row per call into the error_log Data Table. Timestamp is the row's own createdAt system column, so no separate timestamp field is required in the input contract."
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger - Log Error Entry": {
+      "main": [
+        [
+          {
+            "node": "Data Table - Insert Error Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -49,7 +49,7 @@ clean: ## Wipe the local Docker stand completely - containers + all data (DESTRU
 
 # --- Workflow sync (repo <-> running instance) ------------------------------
 
-setup-data-table: ## Create the currency_rates Data Table via the n8n API if it doesn't exist yet (idempotent; needs N8N_API_URL/N8N_API_KEY in .env)
+setup-data-table: ## Create the currency_rates and error_log Data Tables via the n8n API if they don't exist yet (idempotent; needs N8N_API_URL/N8N_API_KEY in .env)
 	@$(call ensure_executable,scripts/create_data_table.sh)
 	@set -a; . ./.env; set +a; scripts/create_data_table.sh
 
@@ -57,14 +57,17 @@ import-credentials: ## Provision the freecurrencyapi + OpenAI credentials from .
 	@$(call ensure_executable,scripts/import_credentials.sh)
 	@set -a; . ./.env; set +a; scripts/import_credentials.sh
 
-setup: setup-data-table import-credentials ## Provision the Docker stand from .env alone: currency_rates Data Table + freecurrencyapi + OpenAI credentials
+setup: setup-data-table import-credentials ## Provision the Docker stand from .env alone: currency_rates + error_log Data Tables + freecurrencyapi + OpenAI credentials
 
 import: ## Import a workflow JSON into the running n8n container and activate it if the file says active:true (usage: make import FILE=currency-rate-loader.json; needs N8N_API_URL/N8N_API_KEY in .env)
 	@$(call ensure_executable,scripts/import_workflow.sh)
-	@set -a; . ./.env; set +a; scripts/import_workflow.sh $(FILE)
+	@$(call ensure_executable,scripts/activate_workflow.sh)
+	@set -a; . ./.env; set +a; \
+	scripts/import_workflow.sh $(FILE) && scripts/activate_workflow.sh $(FILE)
 
-import-all: ## Import every workflow JSON in workflows/ into the running n8n container (needs N8N_API_URL/N8N_API_KEY in .env)
+import-all: ## Import every workflow JSON in workflows/ into the running n8n container, then activate in dependency order (needs N8N_API_URL/N8N_API_KEY in .env)
 	@$(call ensure_executable,scripts/import_workflow.sh)
+	@$(call ensure_executable,scripts/activate_workflow.sh)
 	@set -a; . ./.env; set +a; \
 	for f in workflows/*.json; do \
 		case "$$(basename $$f)" in \
@@ -72,6 +75,12 @@ import-all: ## Import every workflow JSON in workflows/ into the running n8n con
 		esac; \
 		echo "==> $$f"; \
 		scripts/import_workflow.sh $$(basename $$f) || exit 1; \
+	done; \
+	echo "==> computing activation order"; \
+	order="$$(python3 scripts/order_workflows.py)" || exit 1; \
+	for f in $$order; do \
+		echo "==> activating $$f"; \
+		scripts/activate_workflow.sh $$f || exit 1; \
 	done
 
 export: ## Export a workflow from the n8n container back into workflows/ (usage: make export ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
