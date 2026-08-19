@@ -5,13 +5,21 @@
 # create one on first run, so both workflows need their table(s) provisioned
 # before import.
 #
-# Two tables today:
+# Three tables today:
 #   - currency_rates — columns transcribed from
 #     docs/workflows/rate-loader/data-table-schema.md
 #   - error_log       — columns transcribed from
 #     docs/workflows/error-logger/README.md
+#   - config          — shared key/value settings read by the workflows at run
+#     time; see docs/workflows/rate-loader/config-table.md
 # If a schema changes, update both the doc and the matching entry below
 # together.
+#
+# The config table is also seeded here, because the loader deliberately holds no
+# base currency of its own: the default lives in this script as data (or in
+# LOADER_BASE_CURRENCY), not in the workflow JSON. Seeding is skipped when the
+# row already exists, so re-running this script never overwrites a base currency
+# an operator has changed in the table.
 #
 # Usage:
 #   scripts/create_data_table.sh
@@ -111,6 +119,92 @@ JSON
   echo "Created data table '$table_name'."
 }
 
+# table_id <table-name> — print the id of an existing data table.
+table_id() {
+  local table_name="$1" filter response status body
+  filter=$(printf '{"name":"%s"}' "$table_name")
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "X-N8N-API-KEY: $N8N_API_KEY" \
+    -G "$API_BASE/data-tables" \
+    --data-urlencode "filter=$filter")
+  status="${response##*$'\n'}"
+  body="${response%$'\n'"$status"}"
+
+  if [[ "$status" != "200" ]]; then
+    echo "Error: GET $API_BASE/data-tables failed while resolving '$table_name' (HTTP $status)." >&2
+    echo "$body" >&2
+    exit 1
+  fi
+
+  python3 -c "
+import json, sys
+tables = [t for t in json.load(sys.stdin).get('data', []) if t.get('name') == '$table_name']
+if not tables:
+    sys.exit(\"table '$table_name' not found after creation\")
+print(tables[0]['id'])
+" <<< "$body"
+}
+
+# seed_config_if_missing <config-key> <default-value>
+# Insert a config row only when no usable value is present. Rows are read in
+# full and matched here rather than through the API's row filter, so this stays
+# correct regardless of the filter dialect the instance's API version expects —
+# the config table holds a handful of rows.
+seed_config_if_missing() {
+  local config_key="$1" default_value="$2"
+  local table id rows_response rows_status rows_body existing insert_body insert_response insert_status insert_resp_body
+
+  table="config"
+  id=$(table_id "$table")
+
+  rows_response=$(curl -sS -w '\n%{http_code}' \
+    -H "X-N8N-API-KEY: $N8N_API_KEY" \
+    -G "$API_BASE/data-tables/$id/rows" \
+    --data-urlencode "limit=250")
+  rows_status="${rows_response##*$'\n'}"
+  rows_body="${rows_response%$'\n'"$rows_status"}"
+
+  if [[ "$rows_status" != "200" ]]; then
+    echo "Error: GET $API_BASE/data-tables/$id/rows failed (HTTP $rows_status)." >&2
+    echo "$rows_body" >&2
+    exit 1
+  fi
+
+  existing=$(python3 -c "
+import json, sys
+rows = json.load(sys.stdin).get('data', [])
+values = [r.get('config_value') for r in rows if r.get('config_key') == '$config_key']
+usable = [v for v in values if isinstance(v, str) and v.strip()]
+print(usable[0] if usable else '')
+" <<< "$rows_body")
+
+  if [[ -n "$existing" ]]; then
+    echo "Config '$config_key' is already set to '$existing' — leaving it untouched."
+    return 0
+  fi
+
+  insert_body=$(python3 -c "
+import json
+print(json.dumps({'data': [{'config_key': '$config_key', 'config_value': '$default_value'}]}))
+")
+
+  insert_response=$(curl -sS -w '\n%{http_code}' \
+    -X POST "$API_BASE/data-tables/$id/rows" \
+    -H "X-N8N-API-KEY: $N8N_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$insert_body")
+  insert_status="${insert_response##*$'\n'}"
+  insert_resp_body="${insert_response%$'\n'"$insert_status"}"
+
+  if [[ "$insert_status" != "200" && "$insert_status" != "201" ]]; then
+    echo "Error: POST $API_BASE/data-tables/$id/rows failed (HTTP $insert_status)." >&2
+    echo "$insert_resp_body" >&2
+    exit 1
+  fi
+
+  echo "Seeded config '$config_key' = '$default_value'."
+}
+
 create_table_if_missing "currency_rates" '[
     { "name": "base_currency",   "type": "string" },
     { "name": "target_currency", "type": "string" },
@@ -123,3 +217,13 @@ create_table_if_missing "error_log" '[
     { "name": "context",         "type": "string" },
     { "name": "message",         "type": "string" }
   ]'
+
+create_table_if_missing "config" '[
+    { "name": "config_key",   "type": "string" },
+    { "name": "config_value", "type": "string" }
+  ]'
+
+# The loader reads its base currency from this row and substitutes nothing of
+# its own, so a stand with no row here fails its run loudly instead of loading
+# rates against a silently assumed currency.
+seed_config_if_missing "base_currency" "${LOADER_BASE_CURRENCY:-USD}"

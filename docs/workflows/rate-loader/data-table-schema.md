@@ -21,8 +21,9 @@ one unit of `base_currency` was worth `rate` units of `target_currency` as of
 **The key follows the API.** freecurrencyapi's `/latest` endpoint returns one
 object keyed by target currency for a single base. One call therefore produces
 exactly one row per target currency, and the natural key falls straight out of
-the response. Storing the base in its own column rather than assuming USD keeps
-the door open to loading a second base later without a migration.
+the response. Storing the base in its own column rather than assuming it keeps
+the door open to loading a second base later without a migration — and the base
+the loader uses is itself a table value, see [the config table](config-table.md).
 
 **Upsert, not append.** The loader matches on both key columns and updates in
 place. A repeated run — a retry, a manual test, a backfill — refreshes the same
@@ -42,7 +43,7 @@ number of questions asked.
 
 ## Cross rates are derived, not stored
 
-The loader stores only `USD → X`. A question like "CAD to AUD" is answered by
+The loader stores only `base → X` for the single configured base. A question like "CAD to AUD" is answered by
 dividing one stored rate by the other, at query time, inside the tool.
 
 The alternative — storing every ordered pair — would turn 33 rows into over a

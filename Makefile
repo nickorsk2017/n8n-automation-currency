@@ -26,6 +26,19 @@ define ensure_executable
 	fi
 endef
 
+# Guard: targets addressed at a single workflow take ID / FILE on the command
+# line. Without them the recipe still runs, and `$(FILE)` expanding to nothing
+# turns `cp workflows/$(FILE)` into a command aimed at the whole directory. Fail
+# before the first command of the recipe, with a greppable marker and the usage
+# line, rather than after something has already been copied or moved. Exit 2 =
+# "invoked wrong", distinct from 126 = "script not executable" above.
+define require_var
+	if [ -z "$(2)" ]; then \
+		echo "ERR_MISSING_VAR: $(1) is required. Usage: $(3)" >&2; \
+		exit 2; \
+	fi
+endef
+
 # --- Stack lifecycle (local Docker stand) -----------------------------------
 
 up: ## Start n8n in the background
@@ -49,7 +62,12 @@ clean: ## Wipe the local Docker stand completely - containers + all data (DESTRU
 
 # --- Workflow sync (repo <-> running instance) ------------------------------
 
-setup-data-table: ## Create the currency_rates and error_log Data Tables via the n8n API if they don't exist yet (idempotent; needs N8N_API_URL/N8N_API_KEY in .env)
+# The config table is where the loader's base currency lives. To change it on a
+# running stand: n8n UI -> Data tables -> config -> edit the base_currency row.
+# The next loader run uses it; no workflow edit, export or re-import. Re-running
+# this target never overwrites a value already set there. A run that fails with
+# failure_stage=CONFIG means that row is missing or blank on this stand.
+setup-data-table: ## Create the currency_rates, error_log and config Data Tables via the n8n API if they don't exist yet, and seed the default base currency (idempotent; needs N8N_API_URL/N8N_API_KEY in .env)
 	@$(call ensure_executable,scripts/create_data_table.sh)
 	@set -a; . ./.env; set +a; scripts/create_data_table.sh
 
@@ -57,9 +75,10 @@ import-credentials: ## Provision the freecurrencyapi + OpenAI credentials from .
 	@$(call ensure_executable,scripts/import_credentials.sh)
 	@set -a; . ./.env; set +a; scripts/import_credentials.sh
 
-setup: setup-data-table import-credentials ## Provision the Docker stand from .env alone: currency_rates + error_log Data Tables + freecurrencyapi + OpenAI credentials
+setup: setup-data-table import-credentials ## Provision the Docker stand from .env alone: currency_rates + error_log + config Data Tables (config seeded with LOADER_BASE_CURRENCY, default USD) + freecurrencyapi + OpenAI credentials
 
 import: ## Import a workflow JSON into the running n8n container and activate it if the file says active:true (usage: make import FILE=currency-rate-loader.json; needs N8N_API_URL/N8N_API_KEY in .env)
+	@$(call require_var,FILE,$(FILE),make import FILE=currency-rate-loader.json)
 	@$(call ensure_executable,scripts/import_workflow.sh)
 	@$(call ensure_executable,scripts/activate_workflow.sh)
 	@set -a; . ./.env; set +a; \
@@ -84,15 +103,18 @@ import-all: ## Import every workflow JSON in workflows/ into the running n8n con
 	done
 
 export: ## Export a workflow from the n8n container back into workflows/ (usage: make export ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
+	@$(call require_var,ID,$(ID),make export ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
+	@$(call require_var,FILE,$(FILE),make export ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
 	@$(call ensure_executable,scripts/export_workflow.sh)
 	scripts/export_workflow.sh $(ID) $(FILE)
 
 drift: ## Check workflows/<FILE> still matches the instance (usage: make drift ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
+	@$(call require_var,ID,$(ID),make drift ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
+	@$(call require_var,FILE,$(FILE),make drift ID=<WORKFLOW_ID> FILE=currency-rate-loader.json)
 	@$(call ensure_executable,scripts/export_workflow.sh)
-	@tmp=$$(mktemp -d); \
-	cp workflows/$(FILE) $$tmp/repo.json; \
-	scripts/export_workflow.sh $(ID) $(FILE) >/dev/null; \
-	mv workflows/$(FILE) $$tmp/instance.json; \
-	mv $$tmp/repo.json workflows/$(FILE); \
-	scripts/check_workflow_drift.py workflows/$(FILE) $$tmp/instance.json; \
-	status=$$?; rm -rf $$tmp; exit $$status
+	@set -e; tmp=$$(mktemp -d); trap 'rm -rf $$tmp' EXIT; \
+	cp workflows/$(FILE) $$tmp/repo.json && \
+	scripts/export_workflow.sh $(ID) $(FILE) >/dev/null && \
+	cp workflows/$(FILE) $$tmp/instance.json && \
+	cp $$tmp/repo.json workflows/$(FILE) && \
+	scripts/check_workflow_drift.py workflows/$(FILE) $$tmp/instance.json

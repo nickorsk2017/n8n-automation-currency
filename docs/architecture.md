@@ -60,16 +60,19 @@ same daily schedule rather than restoring the original.
 ## Data flow
 
 1. **06:00 UTC** — the loader's Schedule Trigger fires on the dev stand.
-2. It reads `base_currency` (default `USD`) from a config node, calls
+2. It reads `base_currency` from the `config` Data Table (seeded to `USD` at
+   provisioning time), calls
    freecurrencyapi's `/latest` endpoint, and validates the response.
 3. Valid rates are upserted into the `currency_rates` Data Table, one row per
    currency pair, keyed so that a repeated run updates rather than appends.
 4. A user opens the chat interface and asks a question in natural language.
 5. The agent extracts the amount and the two currency codes and calls the
    `convert_currency` tool. It is instructed never to compute a rate itself.
-6. The tool validates the input, reads `currency_rates`, derives a cross rate
-   when neither currency is the base, and returns the converted amount, the rate
-   used, and when that rate was fetched.
+6. The tool validates the input, reads `currency_rates`, takes the base the
+   rates are quoted against from the `base_currency` column of the rows it read
+   rather than assuming one, derives a cross rate when neither currency is that
+   base, and returns the converted amount, the rate used, and when that rate was
+   fetched.
 7. The agent turns that into a sentence, including the freshness timestamp, or
    explains the problem in plain language if the tool returned an error.
 

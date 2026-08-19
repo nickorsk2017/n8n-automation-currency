@@ -9,8 +9,9 @@ Pulls the latest exchange rates once a day and writes them into the
 
 ```
 Schedule Trigger - Daily FX Pull        06:00 UTC, every day
-   └─ Set - Loader Config               base_currency = USD
-      └─ HTTP Request - Fetch Latest Rates   GET /latest
+   └─ Data Table - Get Base Currency Config   config table, base_currency row
+      └─ IF - Base Currency Configured        is a base currency set at all?
+         └─ HTTP Request - Fetch Latest Rates   GET /latest
          ├─ IF - Response OK                 does the payload contain rates?
          │   └─ Code - Rates To Rows         { EUR: 0.86, ... } → one row per pair
          │      └─ IF - Rows Valid           did we get at least one row at all?
@@ -33,40 +34,36 @@ travels with the exported file, and `docker-compose.yml` additionally sets
 To change the time, edit `triggerAtHour` / `triggerAtMinute` on the trigger node
 and export the workflow back to the repository.
 
-## The base currency is configurable
+## The base currency lives in a data table
 
-`Set - Loader Config` holds `base_currency` as a single field, and the HTTP node
-reads it from there rather than embedding it in the URL, so the value only has
-to change in one place and is carried into every stored row.
+The loader holds no base currency of its own. `Data Table - Get Base Currency
+Config` reads the `base_currency` row of the shared `config` table at the start
+of every run, and that value flows into the API call, into every stored row, and
+into the error record. Changing the base is an edit to one table cell — no
+workflow edit, no re-export, no re-import. See
+[the config table](config-table.md) for its shape, the default, and how the
+default is seeded.
 
-**Current shipped state:** the field's value is the literal `"USD"`. Changing
-it means opening the node in the n8n editor, editing the field, and
-re-exporting the workflow per the repository's export discipline.
+`IF - Base Currency Configured` gates the rest of the run on that value: an
+absent or blank one fails at stage `CONFIG` rather than falling back to a
+currency the workflow picked. A fallback would be indistinguishable from a
+correct run in the execution list while quietly filling the table against the
+wrong base.
 
-**Why not an n8n Variable.** `{{ $vars.BASE_CURRENCY }}` would make the value
-editable from **Home → Variables** without touching the workflow at all — but
-that feature is gated behind an Enterprise license on self-hosted Community
-edition. Attempting to open the Variables screen on a self-hosted Community
-instance returns "Available on the Enterprise plan"; Variables are free only
-on n8n Cloud and Self-hosted Enterprise. This repository's stand runs
-self-hosted Community (`docker-compose.yml`, `make up`), and the brief rules
-out paid plans, so Variables are not a reachable option here. The node-level
-literal is the correct choice for this stand, not a shortcut — "single field
-to edit and re-export" is the ceiling for configurability without a paid
-license on self-hosted.
-
-**If this ran on n8n Cloud instead**, Variables are free there, and the
-config would move to `{{ $vars.BASE_CURRENCY }}` (with `BASE_CURRENCY` set
-under Home → Variables) so the base currency could change without editing or
-re-exporting the workflow. That is a stand-specific improvement, not
-something to apply to the JSON checked into this Community-stand repository.
+**Why not an n8n Variable.** `{{ $vars.BASE_CURRENCY }}` would be the idiomatic
+way to make a value editable outside the workflow, but Variables are gated
+behind an Enterprise license on self-hosted Community edition — the stand this
+repository runs (`docker-compose.yml`, `make up`) — and free only on n8n Cloud.
+The config table gives the same "edit it in the UI, no export" property with no
+licence attached, and generalises to further settings as rows.
 
 ## What counts as a run failure
 
-Three things can fail the whole run (mark the execution red, write nothing):
+Four things can fail the whole run (mark the execution red, write nothing):
 
 | Stage | Trigger |
 |---|---|
+| `CONFIG` | No usable `base_currency` row in the `config` table |
 | `HTTP_FETCH` | The API call failed — timeout, rate limit, non-2xx status, or an error body |
 | `API_RESPONSE` | The call returned, but with no usable rate data |
 | `ROW_VALIDATION` | The transformed `rows` array came back empty — no currency pairs at all |
@@ -82,7 +79,7 @@ momentary timeout or a fleeting rate-limit response from freecurrencyapi no
 longer fails the day's run on its own — only a request that is still failing
 after all three attempts reaches `HTTP_FETCH`.
 
-All three converge on `Code - Build Error Record`, which emits:
+All four converge on `Code - Build Error Record`, which emits:
 
 ```json
 {
@@ -134,11 +131,13 @@ them. Manual test runs are safe for the same reason.
 ## When it fails, what to do
 
 1. Open the failed execution and read the `Code - Build Error Record` output —
-   `failure_stage` says which of the three things happened.
-2. `HTTP_FETCH` with a 4xx usually means the API key or the base currency; the
+   `failure_stage` says which of the four things happened.
+2. `CONFIG` means the stand was never provisioned, or the `base_currency` row
+   was blanked: run `make setup-data-table`, or set the value in the table.
+3. `HTTP_FETCH` with a 4xx usually means the API key or the base currency; the
    free tier's monthly quota is also visible in the response headers.
-3. `API_RESPONSE` or `ROW_VALIDATION` means the API answered with something
+4. `API_RESPONSE` or `ROW_VALIDATION` means the API answered with something
    unexpected — worth checking whether freecurrencyapi changed its response
    shape.
-4. The table is untouched either way, so re-running after a fix is safe and
+5. The table is untouched either way, so re-running after a fix is safe and
    needs no cleanup.

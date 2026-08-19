@@ -230,8 +230,8 @@ on a successful response; it plays no part in any `error_code` path below.
 | `INVALID_AMOUNT` | Amount missing or not a number |
 | `NON_POSITIVE_AMOUNT` | Amount is zero or negative |
 | `INVALID_CURRENCY_CODE` | Not a three-letter code |
-| `UNKNOWN_CURRENCY` | Well-formed code, but no rate stored for it |
-| `NO_RATE_DATA` | No rows were found for a requested non-base currency — the loader has not run yet. This also covers a base-currency (USD) leg: e.g. `EUR -> USD` on an empty table reports `NO_RATE_DATA`, not `UNKNOWN_CURRENCY`, since the missing data is the real cause, not an unrecognized code. |
+| `UNKNOWN_CURRENCY` | Well-formed code, but no rate stored for it — claimed only when the fetched rows can prove it, i.e. they all share one recorded base |
+| `NO_RATE_DATA` | The lookup came back empty — the loader has not run yet. Every conversion is refused in that state, including a base-currency leg and a code converted into itself, because the missing data is the real cause and no answer should come from no data. Also reported when the rows cannot prove a code unknown: no row records a base, or the rows are quoted against two different bases mid-migration. |
 
 Codes are for the agent, not the user. The prompt requires the agent to
 translate them; the user should never see the string `UNKNOWN_CURRENCY`.
@@ -249,16 +249,35 @@ effective_rate = rate(to_currency) / rate(from_currency)
 converted      = amount × effective_rate
 ```
 
-with `rate(USD) = 1` by definition, since the stored rates are quoted against
-USD. So `EUR → JPY` divides the stored JPY rate by the stored EUR rate, while
-`USD → JPY` is just the stored JPY rate. Results are rounded to six decimals.
+with `rate(base) = 1` by definition, since every stored rate is quoted against
+that base. So with a USD-based table `EUR → JPY` divides the stored JPY rate by
+the stored EUR rate, while `USD → JPY` is just the stored JPY rate. Results are
+rounded to six decimals.
+
+The base is not a constant in the tool. Each `currency_rates` row records the
+base its rate is quoted against, so the tool takes the base from the most
+recently fetched row it just read, and ignores rows quoted against any other
+base when dividing. Changing what the loader fetches against therefore changes
+the agent's arithmetic with it, instead of leaving the two to disagree silently.
+A lookup that returns nothing at all leaves no base to read, and the tool
+declines rather than answering from no data — including for a code converted
+into itself, whose rate of 1 is the one answer that would not have needed the
+table.
+
+The row set is also allowed to say a code is unknown only when it can be sure.
+That holds when a base was derived and every fetched row is quoted against it.
+If no row records a base, or the rows carry two different ones because the
+loader's base has changed and the old rows have not yet been overwritten, an
+unmatched code is reported as missing data instead. The old base is the likeliest
+casualty of such a switch and is invisible to the lookup, since a base never
+appears as a target; calling a real currency unsupported is the worse mistake of
+the two.
 
 One subtlety worth knowing about: the Data Table lookup runs with
 `alwaysOutputData` enabled. Without it, a lookup matching nothing produces zero
 items, n8n drops the branch, and the tool returns nothing at all instead of a
 usable error — the agent would then have no idea why it got silence. With it,
-the empty result reaches the code that turns "no rows" into `UNKNOWN_CURRENCY`
-or `NO_RATE_DATA`.
+the empty result reaches the code that turns "no rows" into `NO_RATE_DATA`.
 
 ## Greeting
 
@@ -281,11 +300,12 @@ Rules:
    call the convert_currency tool. Never calculate the conversion yourself, even
    for currencies you think you know the rate for -- only the tool has the live
    stored rate. This applies with NO exception when one side of the conversion
-   is the base currency (USD): do not skip the tool because a USD leg seems
-   "trivial" or you assume its rate is 1 -- the tool is still the only source
-   of the current stored rate and its freshness (fetched_at/is_stale) for the
-   other currency, so always call it for USD conversions too (e.g. "100 EUR to
-   USD", "50 USD to JPY").
+   is the base currency that the stored rates are quoted against: do not skip
+   the tool because such a leg seems "trivial" or you assume its rate is 1 --
+   the tool is still the only source of the current stored rate and its
+   freshness (fetched_at/is_stale) for the other currency, and the only thing
+   that knows which currency the base actually is. Never assume a particular
+   currency is the base.
 2. Extract the amount, from_currency, and to_currency from the user's message
    (and from earlier turns in the conversation for follow-up questions such as
    'and in GBP?' or 'what about CAD?'). Use standard 3-letter ISO currency codes.
@@ -317,9 +337,11 @@ Input` (see Guardrail, above), so this prompt only ever runs against
 already-screened input. Rule 1 exists because an LLM will happily produce a
 plausible exchange rate
 from memory; forbidding that is what makes the answers trustworthy, and it
-says so explicitly for base-currency (USD) legs because a rate of 1 is exactly
-the kind of "I already know this" case a model is tempted to skip the tool
-for. The AI Agent node has no `tool_choice`/forced-tool-use setting, so this
+says so explicitly for base-currency legs because a rate of 1 is exactly the
+kind of "I already know this" case a model is tempted to skip the tool for. It
+names no base currency, for the same reason the tool does not hardcode one: the
+model would then be asserting from memory something only the stored data
+knows. The AI Agent node has no `tool_choice`/forced-tool-use setting, so this
 guarantee is enforced entirely by the prompt, not by node configuration. Rule
 3 keeps internal error codes out of the conversation. Rule 4 stops the agent
 guessing a missing amount, which is worse than asking.

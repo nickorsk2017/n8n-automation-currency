@@ -1,0 +1,11 @@
+# LOG — 2026-08-18-agent-base-currency-not-hardcoded
+- 2026-08-18T10:16 Engineer INIT created, complexity=MEDIUM, next_actor=Planner
+- 2026-08-18T13:20 Planner PLAN.md v1 written; stage INIT->PLANNED, next_actor=Executor
+- 2026-08-18T13:45 Executor EXEC.md v1 written; cloud updated + re-exported + docs; stage PLANNED->EXECUTED, next_actor=Validator
+- 2026-08-18T14:05 Validator VALIDATION.md v1 = FAIL (V1 architecture, V2 requirement blocking; V3-V6 minor); stage EXECUTED->VALIDATED, iteration=1, next_actor=Engineer
+- 2026-08-19T09:10 Engineer resolved V2: R3a ratified (empty table always NO_RATE_DATA) + A2a added to TASK.md; V1 mechanism chosen = recreate node with notes; open_issues=[V1], next_actor=Planner
+- 2026-08-19T09:25 Planner PLAN.md v2 (P2'/P4'/P5'/P6'/P9) addressing V1 and V3-V6; open_issues cleared; stage VALIDATED->PLANNED, next_actor=Executor
+- 2026-08-19T10:05 Executor EXEC.md v2; node recreated with notes, cloud draft published (activeVersion 53be2e39), repo re-exported, docs updated; stage PLANNED->EXECUTED, next_actor=Validator
+- 2026-08-19T10:30 Executor EXEC.md v3; V8 artifact headers + V9 error-table wording; no workflow change
+- 2026-08-19T10:45 Validator VALIDATION.md v2 = PASS (V8/V9 closed by EXEC v3; V7/V10 accepted as minor); stage EXECUTED->DONE, status=PASS
+- 2026-08-19T10:46 Engineer CLOSED done=True; archived to tasks/DONE/2026-08

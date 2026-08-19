@@ -72,8 +72,9 @@ key) and add it to `.env` as `N8N_API_KEY`. Then provision everything the
 workflows depend on from `.env` alone — no manual n8n UI steps:
 
 ```bash
-make setup     # idempotent — creates the currency_rates Data Table and
-               # imports both credentials (freecurrencyapi, OpenAI) from .env
+make setup     # idempotent — creates the Data Tables (currency_rates, error_log,
+               # config, seeded with the default base currency) and imports both
+               # credentials (freecurrencyapi, OpenAI) from .env
 ```
 
 See [the rate loader docs](docs/workflows/rate-loader/) for the Data Table's
@@ -118,15 +119,13 @@ chmod +x scripts/create_data_table.sh scripts/import_credentials.sh scripts/impo
 
 ## Configuring the base currency
 
-The loader's base currency defaults to USD and is currently a single-field
-edit in `Set - Loader Config`. n8n Variables — the usual way to make a value
-like this editable without touching the workflow — are gated behind an
-Enterprise license on self-hosted Community edition, which is what
-`docker-compose.yml` runs here; they're free only on n8n Cloud. Since the
-brief rules out paid plans, Variables aren't a reachable option on this
-stand, so the node-level literal is the correct choice here, not a shortcut.
-See [the rate loader docs](docs/workflows/rate-loader/) for the exact steps
-and the Cloud-only alternative.
+The base currency is data, not workflow content: it lives in the `config` Data
+Table, seeded to USD by `make setup` (override with `LOADER_BASE_CURRENCY` in
+`.env`). Changing it is an edit to one cell in the n8n UI — the workflow is not
+touched and does not need re-exporting. n8n Variables, the usual mechanism for
+this, are Enterprise-gated on the self-hosted Community edition this stand runs.
+See [the rate loader docs](docs/workflows/rate-loader/) for the table's shape
+and what happens when the value is missing.
 
 ## Keeping the repo in sync with the instance
 
@@ -172,7 +171,8 @@ rewritten in place as the system changes rather than kept as a history of
 what was tried.
 
 - [Daily rate loader](docs/workflows/rate-loader/) — schedule, flow, error
-  handling, and the data table schema: columns, the
+  handling, the `config` table its base currency comes from, and the rate
+  table's schema: columns, the
   `(base_currency, target_currency)` key, why it upserts rather than appends,
   and why cross rates are derived instead of stored.
 - [Chat agent](docs/workflows/chat-agent/) — the full agent

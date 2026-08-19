@@ -60,6 +60,9 @@ WORKFLOW_ID="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['
 IS_ACTIVE="$(python3 -c "import json,sys; print('true' if json.load(open(sys.argv[1])).get('active') else 'false')" "$HOST_PATH")"
 
 if [[ "$IS_ACTIVE" != "true" ]]; then
+  # Say so rather than exiting silently: in an import run, no output was
+  # previously indistinguishable between "activated" and "never attempted".
+  echo "Workflow '$FILE' is not marked active — left inactive."
   exit 0
 fi
 
@@ -82,3 +85,5 @@ if [[ "$ACTIVATE_STATUS" != 2* ]]; then
   echo "Check {N8N_API_URL}/api/v1/docs on the running instance for this n8n version's actual activate endpoint if this persists." >&2
   exit 1
 fi
+
+echo "Activated workflow '$WORKFLOW_ID' from $FILE."
